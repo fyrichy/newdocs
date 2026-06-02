@@ -1,0 +1,329 @@
+# ComfyUI-PromptRelay 提示词语法完全指南
+
+## 项目概述
+
+PromptRelay 是 ComfyUI 的时序提示词控制插件，用于在图生视频（I2V）或文生视频任务中实现**分段提示词控制**。通过它可以将不同的提示词分配到视频的不同时间段，从而精确控制视频内容的变化。
+
+---
+
+## 核心概念
+
+| 概念 | 说明 | 作用域 |
+|------|------|--------|
+| **global_prompt** | 全局提示词 | 整个视频 |
+| **local_prompts** | 分段提示词 | 各时间段落 |
+| **segment_lengths** | 每段帧数 | 各时间段落 |
+
+---
+
+## 一、Smart Prompt 语法（PromptRelaySmartEncode）
+
+Smart Prompt 支持两种语法：**内联语法**和**块语法**。系统会自动检测使用的是哪种语法。
+
+### 1.1 内联语法（Inline Syntax）
+
+使用 `|` 分隔各段落，可选添加 `[start-end]` 权重标签。
+
+#### 公式/模板
+
+```
+段落1文本 [权重范围] | 段落2文本 [权重范围] | 段落3文本 [权重范围]
+```
+
+#### 权重计算规则
+
+| 格式 | 含义 | 示例 |
+|------|------|------|
+| `[n-m]` | 范围权重 = m - n | `[0-50]` → 权重50 |
+| `[n]` | 单值权重 = n | `[100]` → 权重100 |
+| 无标签 | 等分权重 = 1 | `段落1 \| 段落2` → 各权重1 |
+
+#### 示例
+
+**等分（无权重标签）**
+```
+A man walks in the forest | He stops and looks around | He runs back
+男人穿过森林 | 他停下来环顾四周 | 他跑回去
+```
+
+**比例分配**
+```
+A man walks in the forest [0-50] | He stops and looks around [50-150] | He runs back [150-200]
+男人穿过森林 [0-50] | 他停下来环顾四周 [50-150] | 他跑回去 [150-200]
+```
+
+**单数字权重**
+```
+第一段内容 [50] | 第二段内容 [100] | 第三段内容 [50]
+```
+
+> **注意**：`[ ]` 内的数字是**相对位置/权重比例**，不是帧数。
+
+---
+
+### 1.2 块语法（Block Syntax）
+
+每段前一行标题，格式：`词语 + 数字 + 冒号`
+
+#### 公式/模板
+
+```
+标题1:
+段落1文本
+标题2:
+段落2文本
+标题3:
+段落3文本
+```
+
+#### 标题前缀词（可选）
+
+`Scene`、`Part`、`Shot`、`Segment`、`Second`、`Beat`、`Chapter`、`Step`、`My`、`The` 等任意词语均可。
+
+#### 权重计算规则
+
+| 标题格式 | 含义 | 权重计算 |
+|----------|------|----------|
+| `Scene 1:` | 单数字 = 等分权重 | 1 |
+| `Scene 1-3:` | 范围 = 结束-开始 | 3-1 = 2 |
+| `Part 5:` | 单数字 = 等分权重 | 1 |
+| `Part 2-6:` | 范围 = 结束-开始 | 6-2 = 4 |
+
+#### 示例
+
+**等分块语法**
+```
+Scene 1:
+A majestic fire Qilin rests atop a volcano, molten lava flows beneath its hooves
+Scene 2:
+The Qilin spreads its wings and soars into the sky
+Scene 3:
+It swoops down toward an ancient forest
+Scene 4:
+It breaks through the clouds and bathes in golden sunlight
+```
+
+**等分块语法（中文）**
+```
+Scene 1:
+一只威严的火麒麟盘踞在火山之巅，炽热的岩浆在脚下流淌，鳞片闪烁着橙红的光芒
+Scene 2:
+火麒麟展开双翼，腾空而起，羽翼拍动带起漫天火星
+Scene 3:
+火麒麟俯冲向一片古老的森林，翅膀掠过树梢
+Scene 4:
+火麒麟冲入云层，最终冲破云层，沐浴在金色阳光中
+```
+
+**比例分配块语法**
+```
+Scene 1-2:
+A man walks in the forest
+Scene 2-5:
+The man encounters a mysterious stranger
+Scene 5-6:
+They exchange greetings and part ways
+```
+
+**比例分配块语法（中文）**
+```
+Scene 1-2:
+男人穿过森林
+Scene 2-5:
+男人遇到一个神秘的陌生人
+Scene 5-6:
+他们互相问候后分别
+```
+
+---
+
+## 二、Timeline 提示词（PromptRelayEncodeTimeline）
+
+Timeline 版本支持可视化时间轴编辑，适合更复杂的项目。
+
+### 2.1 timeline_data JSON 格式
+
+```json
+{
+  "segments": [
+    {
+      "prompt": "段落的文字描述",
+      "length": 123,
+      "color": "#4f8edc"
+    },
+    {
+      "prompt": "第二段的文字描述",
+      "length": 122,
+      "color": "#4f8edc"
+    }
+  ]
+}
+```
+
+### 2.2 时间轴编辑器参数
+
+| 参数 | 说明 |
+|------|------|
+| max_frames | 时间轴总长度（用于显示比例） |
+| fps | 帧率（影响时间单位显示） |
+| time_units | 显示单位：`frames` 或 `seconds` |
+
+---
+
+## 三、高级选项（Advanced Options）
+
+通过 `PromptRelayAdvancedOptions` 节点配置。
+
+### 3.1 参数说明
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| video_strength | 1.0 | 视频时间惩罚强度（0=禁用） |
+| video_window_scale | 1.0 | 锚点区域缩放（<1更早衰减，>1更宽） |
+| audio_epsilon | 0.0 | 音频epsilon（0=继承主epsilon） |
+| audio_strength | 1.0 | 音频惩罚强度 |
+| audio_window_scale | 1.0 | 音频锚点区域缩放 |
+
+### 3.2 Epsilon 参数效果
+
+| Epsilon 值 | 效果 |
+|------------|------|
+| 0.001（默认） | 清晰的段落边界 |
+| 0.1 | 略微柔和过渡 |
+| 0.5+ | 明显平滑过渡 |
+
+> **原理**：Epsilon 控制段落间注意力权重的衰减速度。值越小 = 边界越清晰。
+
+---
+
+## 四、完整示例
+
+### 4.1 火麒麟视频（山海经）
+
+#### Smart Prompt - Block 语法（推荐）
+
+```
+Scene 1:
+一只威严的火麒麟盘踞在火山之巅，炽热的岩浆在脚下流淌，鳞片闪烁着橙红的光芒，威严注视着远方
+Scene 2:
+火麒麟展开双翼，腾空而起，羽翼拍动带起漫天火星，火焰尾迹划破长空
+Scene 3:
+火麒麟俯冲向一片古老的森林，翅膀掠过树梢，引发熊熊大火，森林被照亮如白昼
+Scene 4:
+火麒麟冲入云层，雷电交加，在云海中翻涌，最终冲破云层，沐浴在金色阳光中
+```
+
+#### Smart Prompt - Inline 语法
+
+```
+一只威严的火麒麟盘踞在火山之巅 [0-30] | 火麒麟展开双翼腾空而起火焰尾迹划破长空 [30-80] | 火麒麟俯冲向森林翅膀掠过树梢引发熊熊大火 [80-150] | 火麒麟冲入云层在云海中翻涌沐浴在金色阳光中 [150-200]
+```
+
+#### English Version - Block
+
+```
+Scene 1:
+A majestic fire Qilin rests atop a volcano, molten lava flows beneath its hooves, scales gleaming with orange-red light, gazing into the distance
+Scene 2:
+The Qilin spreads its wings and soars into the sky, wing beats scattering countless sparks, fire trails blazing across the heavens
+Scene 3:
+The Qilin swoops down toward an ancient forest, wings brushing the treetops, igniting raging fires that illuminate the forest bright as day
+Scene 4:
+The Qilin plunges into the clouds, lightning and thunder clashing, churning through the sea of clouds, finally breaking through to bathe in golden sunlight
+```
+
+### 4.2 人物叙事
+
+#### Smart Prompt - Block
+
+```
+Scene 1:
+An old man stands alone on a misty mountain path, wearing worn traveling clothes, a gentle smile on his weathered face
+Scene 2:
+The old man begins walking slowly down the path, each step deliberate and measured
+Scene 3:
+He encounters a curious red panda that climbs down from a nearby tree
+Scene 4:
+The red panda leaps onto the old man's shoulder and they continue walking together
+Scene 5:
+They reach a temple at the mountaintop as the sun sets, golden light washing over them
+```
+
+#### Smart Prompt - Inline
+
+```
+An old man stands on a mountain [0-50] | He begins walking slowly [50-100] | A red panda appears and climbs onto him [100-200] | They walk together toward a temple [200-300] | They arrive at sunset [300-400]
+```
+
+### 4.3 城市街景
+
+#### Smart Prompt - Block
+
+```
+Shot 1:
+A bustling city street at dawn, golden morning light casting long shadows between tall buildings
+Shot 2:
+Commuters walk briskly to work, briefcases and coffee in hand
+Shot 3:
+A street performer begins playing violin, the melody echoing through the crowd
+Shot 4:
+People slow down and gather to listen, faces showing wonder and emotion
+Shot 5:
+The sun rises fully, the street now alive with energy and music
+```
+
+---
+
+## 五、写作规则
+
+### 核心原则
+
+1. **第一段只写静态描述**
+   - 描述当前可见的状态
+   - 不要写动作或运动
+   - 不要写输入中不存在的内容
+
+2. **后续段落只写变化**
+   - 只描述该时间段内发生的变化或移动
+   - 不要重复前面段落已描述的内容
+
+3. **输出格式规范**
+   - Block 语法：标题占一行，内容在下一行
+   - Inline 语法：用 `|` 分隔各段
+
+### 示例对比
+
+| 错误写法 | 正确写法 |
+|----------|----------|
+| 第一段写了"走路" | 第一段只写"站立/静态" |
+| 后续段重复"他穿着..." | 后续段只写"变化" |
+| 混用两种语法 | 选择一种保持一致 |
+
+---
+
+## 六、节点类型速查
+
+| 节点 | 语法支持 | 适用场景 |
+|------|----------|----------|
+| PromptRelayEncode | 基础 Pipe `\|` 分隔 | 简单分段 |
+| PromptRelaySmartEncode | Smart 语法（Inline/Block） | 智能权重解析 |
+| PromptRelayEncodeTimeline | Smart + 可视化 | 复杂项目/协作 |
+
+---
+
+## 七、normalize_by_tokens 选项
+
+当 `normalize_by_tokens = True` 时：
+
+- 每段帧数 = 总帧数 × (该段token数 / 总token数)
+- token 多的段落获得更多 latent 帧
+- 适合提示词长度差异较大的情况
+
+| 设置 | 效果 |
+|------|------|
+| False（默认） | 平均分配 |
+| True | 按token比例分配 |
+
+---
+
+*文档生成日期：2026-06-01*
